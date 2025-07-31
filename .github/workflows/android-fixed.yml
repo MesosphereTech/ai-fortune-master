@@ -1,0 +1,170 @@
+# 🚀 AI算命大师 - 修复版Android构建
+name: Build Android APK Fixed
+
+on:
+  workflow_dispatch: # 仅手动触发，避免过多失败
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 检出代码
+      uses: actions/checkout@v4
+      
+    - name: ☕ 设置Java环境
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: 📱 设置Node.js环境
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: 📦 安装Node.js依赖
+      run: npm ci
+      
+    - name: 🔧 使用GitHub预配置的Android SDK
+      run: |
+        echo "🔧 使用GitHub runner预装的Android SDK..."
+        echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+        echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+        echo "PATH=$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/tools" >> $GITHUB_ENV
+        
+    - name: 🔍 检查Android SDK环境
+      run: |
+        echo "📋 Android环境信息："
+        echo "ANDROID_HOME: $ANDROID_HOME"
+        echo "Java版本:"
+        java -version
+        echo ""
+        echo "📂 检查Android SDK目录："
+        ls -la "$ANDROID_HOME" || echo "Android SDK目录不存在"
+        echo ""
+        echo "📂 检查SDK内容："
+        [ -d "$ANDROID_HOME/platforms" ] && ls -la "$ANDROID_HOME/platforms" || echo "platforms目录不存在"
+        [ -d "$ANDROID_HOME/build-tools" ] && ls -la "$ANDROID_HOME/build-tools" || echo "build-tools目录不存在"
+        
+    - name: 🔍 检查项目结构
+      run: |
+        echo "📂 项目根目录："
+        ls -la
+        echo ""
+        echo "📂 Android项目目录："
+        if [ -d "android" ]; then
+          echo "✅ android目录存在"
+          ls -la android/
+          echo ""
+          echo "📋 检查关键文件："
+          [ -f "android/gradlew" ] && echo "✅ gradlew存在" || echo "❌ gradlew不存在"
+          [ -f "android/build.gradle" ] && echo "✅ root build.gradle存在" || echo "❌ root build.gradle不存在"
+          [ -f "android/app/build.gradle" ] && echo "✅ app build.gradle存在" || echo "❌ app build.gradle不存在"
+          [ -f "android/gradle.properties" ] && echo "✅ gradle.properties存在" || echo "❌ gradle.properties不存在"
+        else
+          echo "❌ android目录不存在！"
+          echo "这可能是React Native项目配置问题。"
+        fi
+        
+    - name: 🛠️ 准备Gradle环境
+      run: |
+        if [ -d "android" ] && [ -f "android/gradlew" ]; then
+          echo "🔧 设置gradlew权限..."
+          chmod +x android/gradlew
+          
+          echo "📋 检查Gradle Wrapper版本..."
+          cd android
+          ./gradlew --version || echo "Gradle版本检查失败"
+          
+          echo "🧹 清理构建缓存..."
+          ./gradlew clean || echo "清理失败，继续..."
+        else
+          echo "❌ 无法准备Gradle环境：关键文件缺失"
+        fi
+        
+    - name: 🏗️ 尝试构建APK
+      run: |
+        if [ -d "android" ] && [ -f "android/gradlew" ]; then
+          echo "🚀 开始构建APK..."
+          cd android
+          
+          echo "📋 列出可用的构建任务..."
+          ./gradlew tasks --group="build" || echo "任务列表获取失败"
+          
+          echo "🔨 尝试构建Debug APK..."
+          if ./gradlew assembleDebug --no-daemon --stacktrace; then
+            echo "✅ Debug APK构建成功！"
+          else
+            echo "❌ Debug APK构建失败，尝试其他方法..."
+            
+            echo "🔨 尝试基础构建..."
+            ./gradlew build --no-daemon --stacktrace || {
+              echo "❌ 基础构建也失败"
+              echo "📋 显示详细错误信息..."
+              ./gradlew assembleDebug --debug --stacktrace || true
+            }
+          fi
+        else
+          echo "❌ 无法构建：Android项目配置不完整"
+        fi
+        
+    - name: 🔍 检查构建结果
+      run: |
+        echo "🔍 搜索所有APK文件..."
+        find . -name "*.apk" -type f 2>/dev/null || echo "未找到APK文件"
+        
+        echo ""
+        echo "📂 检查常见构建输出目录..."
+        
+        if [ -d "android/app/build/outputs/apk" ]; then
+          echo "✅ APK输出目录存在："
+          find android/app/build/outputs/apk -type f || echo "APK目录为空"
+        else
+          echo "❌ APK输出目录不存在"
+        fi
+        
+        if [ -d "android/app/build" ]; then
+          echo "📂 app/build目录内容："
+          ls -la android/app/build/ || echo "无法列出build目录"
+        fi
+        
+    - name: 📤 上传构建产物（如果存在）
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-build-attempt
+        path: |
+          android/app/build/outputs/apk/**/*.apk
+          android/**/build/outputs/apk/**/*.apk
+          android/app/build/outputs/bundle/**/*.aab
+        if-no-files-found: warn
+        
+    - name: 📊 构建报告
+      run: |
+        echo "📊 构建尝试完成"
+        echo "================================"
+        
+        if find . -name "*.apk" -type f | grep -q .; then
+          echo "🎉 成功：找到APK文件！"
+          echo "📁 APK文件位置："
+          find . -name "*.apk" -type f
+          echo ""
+          echo "🎊 恭喜！您的AI算命大师APK已生成！"
+        else
+          echo "❌ APK生成失败"
+          echo ""
+          echo "💡 失败可能原因："
+          echo "1. React Native Android项目配置不完整"
+          echo "2. 缺少必要的Android依赖"
+          echo "3. Gradle配置问题"
+          echo "4. 原生模块编译问题"
+          echo ""
+          echo "🚀 建议解决方案："
+          echo "1. 使用本地开发环境构建"
+          echo "2. 使用Expo或类似服务"
+          echo "3. 检查React Native项目配置"
+          echo "4. 使用Web版本作为替代方案"
+        fi

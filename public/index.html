@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AI算命大师 - 专业的中国传统八字命理分析应用">
+    <title>🔮 AI算命大师 - 专业八字命理分析</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #2C3E50 0%, #34495E 100%);
+            min-height: 100vh;
+        }
+        
+        #root {
+            height: 100vh;
+            width: 100vw;
+        }
+        
+        /* 加载动画 */
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
+            color: white;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #E74C3C;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            font-size: 18px;
+            text-align: center;
+        }
+        
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            body {
+                overflow-x: hidden;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="root">
+        <!-- 加载动画 -->
+        <div class="loading">
+            <div class="spinner"></div>
+            <div class="loading-text">
+                🔮 AI算命大师正在启动...<br>
+                专业八字命理分析系统
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 简单的错误处理
+        window.addEventListener('error', function(e) {
+            console.error('应用启动错误:', e.error);
+            document.getElementById('root').innerHTML = 
+                '<div class="loading"><h2 style="color: #E74C3C;">⚠️ 应用启动失败</h2>' +
+                '<p style="color: white;">请检查网络连接或刷新页面重试</p></div>';
+        });
+        
+        // 设置页面标题
+        document.title = '🔮 AI算命大师 - 专业八字命理分析';
+    </script>
+</body>
+</html>
+ 

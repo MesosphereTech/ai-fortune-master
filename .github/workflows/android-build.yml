@@ -1,0 +1,91 @@
+# 🚀 AI算命大师 - GitHub Actions自动构建APK
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 检出代码
+      uses: actions/checkout@v4
+      
+    - name: ☕ 设置Java环境
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: 📱 设置Node.js环境
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: 📦 安装依赖
+      run: |
+        npm ci
+        
+    - name: 🔧 设置Android SDK
+      uses: android-actions/setup-android@v3
+      
+    - name: 📋 缓存Gradle
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+          
+    - name: 🔑 生成签名密钥 (仅用于测试)
+      run: |
+        mkdir -p android/app
+        keytool -genkey -v -keystore android/app/debug.keystore \
+          -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+          -dname "CN=Android Debug,O=Android,C=US" \
+          -storepass android -keypass android
+          
+    - name: 🏗️ 构建APK
+      run: |
+        cd android
+        chmod +x gradlew
+        ./gradlew assembleRelease
+        
+    - name: 📦 构建AAB (Google Play)
+      run: |
+        cd android
+        ./gradlew bundleRelease
+        
+    - name: 📤 上传APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-release-apk
+        path: android/app/build/outputs/apk/release/app-release.apk
+        
+    - name: 📤 上传AAB
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-release-aab
+        path: android/app/build/outputs/bundle/release/app-release.aab
+        
+    - name: 📊 APK分析
+      run: |
+        APK_SIZE=$(stat -c%s android/app/build/outputs/apk/release/app-release.apk)
+        APK_SIZE_MB=$((APK_SIZE / 1024 / 1024))
+        echo "🎉 APK构建成功！"
+        echo "📦 APK大小: ${APK_SIZE_MB}MB"
+        echo "📁 APK路径: android/app/build/outputs/apk/release/app-release.apk"
+        
+        if [ $APK_SIZE_MB -lt 50 ]; then
+          echo "✅ APK大小符合Google Play要求 (<50MB)"
+        else
+          echo "⚠️ APK大小可能需要优化"
+        fi

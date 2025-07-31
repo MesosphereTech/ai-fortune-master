@@ -28,32 +28,33 @@ jobs:
         node-version: '18'
         cache: 'npm'
         
-    - name: 📦 安装依赖
-      run: |
-        npm ci
-        
     - name: 🔧 设置Android SDK
       uses: android-actions/setup-android@v3
       with:
         api-level: 34
         build-tools: 34.0.0
         
+    - name: 📦 安装Node.js依赖
+      run: npm ci
+      
     - name: 🎯 设置Android环境变量
       run: |
         echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
         echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+        echo "PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_ENV
         
-    - name: 📋 缓存Gradle
+    - name: 📋 缓存Gradle依赖
       uses: actions/cache@v4
       with:
         path: |
           ~/.gradle/caches
           ~/.gradle/wrapper
+          android/.gradle
         key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
         restore-keys: |
           ${{ runner.os }}-gradle-
           
-    - name: 🔑 生成签名密钥 (仅用于测试)
+    - name: 🔑 生成测试签名密钥
       run: |
         mkdir -p android/app
         keytool -genkey -v -keystore android/app/debug.keystore \
@@ -61,19 +62,33 @@ jobs:
           -dname "CN=Android Debug,O=Android,C=US" \
           -storepass android -keypass android
           
-    - name: 🛠️ 确保Gradle Wrapper可执行
+    - name: 🛠️ 设置Gradle权限
+      run: chmod +x android/gradlew
+      
+    - name: 🔍 检查项目结构
       run: |
-        chmod +x android/gradlew
+        echo "📂 项目根目录："
+        ls -la
+        echo ""
+        echo "📂 Android目录："
+        ls -la android/
+        echo ""
+        echo "📂 检查关键文件："
+        [ -f "android/gradlew" ] && echo "✅ gradlew存在" || echo "❌ gradlew不存在"
+        [ -f "android/build.gradle" ] && echo "✅ build.gradle存在" || echo "❌ build.gradle不存在"
+        [ -f "android/app/build.gradle" ] && echo "✅ app/build.gradle存在" || echo "❌ app/build.gradle不存在"
         
-    - name: 🏗️ 构建APK (Debug版本)
+    - name: 🏗️ 构建Debug APK
+      working-directory: android
       run: |
-        cd android
-        ./gradlew assembleDebug --stacktrace --info
+        echo "🚀 开始构建Debug APK..."
+        ./gradlew assembleDebug --no-daemon --stacktrace
         
-    - name: 🏗️ 构建APK (Release版本)
+    - name: 🏗️ 构建Release APK
+      working-directory: android
       run: |
-        cd android
-        ./gradlew assembleRelease --stacktrace --info
+        echo "🚀 开始构建Release APK..."
+        ./gradlew assembleRelease --no-daemon --stacktrace
         
     - name: 📤 上传Debug APK
       uses: actions/upload-artifact@v4

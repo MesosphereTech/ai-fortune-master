@@ -1,0 +1,137 @@
+# 📱 AI算命大师 - 简化Android构建
+name: Build Android APK Simple
+
+on:
+  workflow_dispatch: # 只允许手动触发
+
+jobs:
+  android-build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 检出代码
+      uses: actions/checkout@v4
+      
+    - name: ☕ 设置Java环境
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: 📱 设置Node.js环境
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: 📦 安装Node.js依赖
+      run: npm ci
+      
+    - name: 🔧 使用GitHub预装Android SDK
+      run: |
+        echo "📱 使用GitHub预装的Android SDK..."
+        echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+        echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+        echo "PATH=$PATH:/usr/local/lib/android/sdk/platform-tools" >> $GITHUB_ENV
+        
+    - name: 🔍 检查Android环境
+      run: |
+        echo "🔍 检查Android SDK环境..."
+        echo "ANDROID_HOME: $ANDROID_HOME"
+        ls -la $ANDROID_HOME || echo "Android SDK目录不存在"
+        java -version
+        
+    - name: 🔍 检查项目Android结构
+      run: |
+        echo "📂 检查Android项目结构..."
+        if [ -d "android" ]; then
+          echo "✅ android目录存在"
+          ls -la android/
+          
+          if [ -f "android/gradlew" ]; then
+            echo "✅ gradlew存在"
+            chmod +x android/gradlew
+          else
+            echo "❌ gradlew不存在"
+          fi
+          
+          if [ -f "android/build.gradle" ]; then
+            echo "✅ build.gradle存在"
+          else
+            echo "❌ build.gradle不存在"
+          fi
+        else
+          echo "❌ android目录不存在"
+        fi
+        
+    - name: 🛠️ 尝试基础Gradle命令
+      working-directory: android
+      run: |
+        echo "🔧 尝试基础Gradle命令..."
+        if [ -f "gradlew" ]; then
+          echo "📋 检查Gradle版本..."
+          ./gradlew --version || echo "Gradle版本检查失败"
+          
+          echo "📋 列出可用任务..."
+          ./gradlew tasks --all || echo "任务列表获取失败"
+          
+          echo "🧹 清理项目..."
+          ./gradlew clean || echo "清理失败"
+        else
+          echo "❌ gradlew文件不存在，无法构建"
+        fi
+        
+    - name: 🎯 生成最小化APK（如果可能）
+      working-directory: android
+      run: |
+        echo "🎯 尝试生成最小化APK..."
+        if [ -f "gradlew" ]; then
+          echo "🚀 开始构建..."
+          ./gradlew assembleDebug --info --no-daemon || {
+            echo "❌ Debug构建失败，尝试其他方式..."
+            ./gradlew build --info --no-daemon || {
+              echo "❌ 标准构建也失败"
+              echo "📋 显示详细错误信息..."
+              ./gradlew assembleDebug --debug --stacktrace || true
+            }
+          }
+        else
+          echo "❌ 无法构建：gradlew不存在"
+        fi
+        
+    - name: 🔍 检查构建结果
+      run: |
+        echo "🔍 检查构建产物..."
+        find android -name "*.apk" -type f 2>/dev/null || echo "未找到APK文件"
+        
+        echo "📂 检查可能的输出目录..."
+        [ -d "android/app/build/outputs" ] && ls -la android/app/build/outputs/ || echo "outputs目录不存在"
+        [ -d "android/app/build/outputs/apk" ] && ls -la android/app/build/outputs/apk/ || echo "apk目录不存在"
+        
+    - name: 📤 上传任何找到的APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-apk-attempt
+        path: |
+          android/app/build/outputs/apk/**/*.apk
+          android/**/build/outputs/apk/**/*.apk
+        if-no-files-found: warn
+        
+    - name: 📊 构建报告
+      run: |
+        echo "📊 Android构建尝试完成"
+        echo ""
+        if find android -name "*.apk" -type f | grep -q .; then
+          echo "🎉 成功：找到APK文件！"
+          find android -name "*.apk" -type f
+        else
+          echo "❌ 失败：未生成APK文件"
+          echo ""
+          echo "💡 可能的原因："
+          echo "1. React Native项目需要完整的Android开发环境"
+          echo "2. 缺少React Native原生模块配置"
+          echo "3. Gradle配置问题"
+          echo "4. Android SDK配置问题"
+          echo ""
+          echo "🚀 建议：使用专门的React Native构建Action或本地环境"
+        fi

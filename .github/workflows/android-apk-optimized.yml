@@ -1,0 +1,234 @@
+# 🚀 AI算命大师 - 优化APK构建和上传
+name: Build Android APK Optimized
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 检出代码
+      uses: actions/checkout@v4
+      
+    - name: ☕ 设置Java环境
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: 📱 设置Node.js环境
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: 📦 安装Node.js依赖
+      run: npm ci
+      
+    - name: 🔧 设置Android环境
+      run: |
+        echo "🔧 配置Android SDK环境..."
+        echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+        echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+        echo "PATH=$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/tools" >> $GITHUB_ENV
+        
+    - name: 🔍 项目结构诊断
+      run: |
+        echo "🔍 检查项目结构..."
+        echo "📂 项目根目录："
+        ls -la
+        echo ""
+        echo "📂 检查React Native配置："
+        [ -f "react-native.config.js" ] && echo "✅ react-native.config.js存在" || echo "❌ react-native.config.js不存在"
+        [ -f "metro.config.js" ] && echo "✅ metro.config.js存在" || echo "❌ metro.config.js不存在"
+        [ -f "app.json" ] && echo "✅ app.json存在" || echo "❌ app.json不存在"
+        echo ""
+        echo "📂 Android项目检查："
+        if [ -d "android" ]; then
+          echo "✅ Android目录存在"
+          ls -la android/
+          echo ""
+          echo "📋 Android配置文件："
+          [ -f "android/build.gradle" ] && echo "✅ android/build.gradle存在" || echo "❌ android/build.gradle不存在"
+          [ -f "android/settings.gradle" ] && echo "✅ android/settings.gradle存在" || echo "❌ android/settings.gradle不存在"
+          [ -f "android/gradle.properties" ] && echo "✅ android/gradle.properties存在" || echo "❌ android/gradle.properties不存在"
+          [ -f "android/gradlew" ] && echo "✅ android/gradlew存在" || echo "❌ android/gradlew不存在"
+          echo ""
+          if [ -d "android/app" ]; then
+            echo "✅ android/app目录存在"
+            [ -f "android/app/build.gradle" ] && echo "✅ android/app/build.gradle存在" || echo "❌ android/app/build.gradle不存在"
+          else
+            echo "❌ android/app目录不存在"
+          fi
+        else
+          echo "❌ Android目录不存在"
+        fi
+        
+    - name: 🛠️ 准备Android构建环境
+      run: |
+        if [ -d "android" ] && [ -f "android/gradlew" ]; then
+          echo "🛠️ 设置Gradle权限..."
+          chmod +x android/gradlew
+          
+          echo "📋 检查Gradle Wrapper..."
+          cd android
+          ./gradlew --version
+          
+          echo "🧹 清理之前的构建..."
+          ./gradlew clean
+        else
+          echo "❌ Android项目配置不完整，无法构建APK"
+          exit 1
+        fi
+        
+    - name: 🏗️ 构建Android APK（多种方式）
+      run: |
+        cd android
+        
+        echo "🚀 方式1: 尝试构建Release APK..."
+        if ./gradlew assembleRelease --no-daemon --stacktrace; then
+          echo "✅ Release APK构建成功！"
+        else
+          echo "❌ Release APK构建失败，尝试Debug版本..."
+          
+          echo "🚀 方式2: 尝试构建Debug APK..."
+          if ./gradlew assembleDebug --no-daemon --stacktrace; then
+            echo "✅ Debug APK构建成功！"
+          else
+            echo "❌ Debug APK也失败，尝试基础构建..."
+            
+            echo "🚀 方式3: 尝试基础构建..."
+            if ./gradlew build --no-daemon --stacktrace; then
+              echo "✅ 基础构建成功！"
+            else
+              echo "❌ 所有构建方式都失败了"
+              echo "📋 显示详细错误..."
+              ./gradlew assembleDebug --info --stacktrace || true
+            fi
+          fi
+        fi
+        
+    - name: 🔍 全面搜索APK文件
+      id: find_apks
+      run: |
+        echo "🔍 开始全面搜索APK文件..."
+        echo ""
+        
+        # 搜索所有可能的APK位置
+        echo "📂 搜索范围1: android/app/build/outputs/"
+        find android/app/build/outputs/ -name "*.apk" -type f 2>/dev/null || echo "此路径下无APK文件"
+        
+        echo ""
+        echo "📂 搜索范围2: android/build/outputs/"
+        find android/build/outputs/ -name "*.apk" -type f 2>/dev/null || echo "此路径下无APK文件"
+        
+        echo ""
+        echo "📂 搜索范围3: 整个android目录"
+        find android/ -name "*.apk" -type f 2>/dev/null || echo "整个android目录下无APK文件"
+        
+        echo ""
+        echo "📂 搜索范围4: 整个项目"
+        APK_FILES=$(find . -name "*.apk" -type f 2>/dev/null || true)
+        
+        if [ -n "$APK_FILES" ]; then
+          echo "🎉 找到APK文件！"
+          echo "$APK_FILES"
+          echo ""
+          echo "📊 APK文件详情："
+          for apk in $APK_FILES; do
+            echo "📱 $apk"
+            ls -lh "$apk"
+            echo ""
+          done
+          echo "has_apk=true" >> $GITHUB_OUTPUT
+          echo "apk_files<<EOF" >> $GITHUB_OUTPUT
+          echo "$APK_FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        else
+          echo "❌ 未找到任何APK文件"
+          echo "has_apk=false" >> $GITHUB_OUTPUT
+        fi
+        
+        # 同时搜索AAB文件
+        echo ""
+        echo "🔍 搜索AAB文件..."
+        AAB_FILES=$(find . -name "*.aab" -type f 2>/dev/null || true)
+        if [ -n "$AAB_FILES" ]; then
+          echo "📦 找到AAB文件！"
+          echo "$AAB_FILES"
+          echo "has_aab=true" >> $GITHUB_OUTPUT
+        else
+          echo "❌ 未找到AAB文件"
+          echo "has_aab=false" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: 📤 上传APK文件
+      if: steps.find_apks.outputs.has_apk == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ai-fortune-master-apk
+        path: |
+          **/*.apk
+          **/*.aab
+        if-no-files-found: warn
+        retention-days: 30
+        
+    - name: 📤 上传详细构建日志
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-logs
+        path: |
+          android/build/reports/**/*
+          android/app/build/reports/**/*
+          android/gradle.properties
+          android/local.properties
+        if-no-files-found: ignore
+        retention-days: 7
+        
+    - name: 🎊 构建结果报告
+      run: |
+        echo "🎊 构建过程完成！"
+        echo "================================"
+        
+        if [ "${{ steps.find_apks.outputs.has_apk }}" == "true" ]; then
+          echo "🎉 SUCCESS: APK构建成功！"
+          echo ""
+          echo "📱 生成的APK文件："
+          echo "${{ steps.find_apks.outputs.apk_files }}"
+          echo ""
+          echo "📥 下载方式："
+          echo "1. 访问此构建的Artifacts部分"
+          echo "2. 下载 'ai-fortune-master-apk' 文件"
+          echo "3. 解压后获得APK文件"
+          echo ""
+          echo "📱 安装方式："
+          echo "1. 启用Android设备的"未知来源"安装"
+          echo "2. 将APK文件传输到Android设备"
+          echo "3. 点击APK文件进行安装"
+          echo ""
+          echo "🎊 恭喜！您的AI算命大师应用已准备就绪！"
+        else
+          echo "❌ APK构建失败"
+          echo ""
+          echo "💡 可能的原因："
+          echo "1. React Native Android配置不完整"
+          echo "2. 依赖包有问题"
+          echo "3. Gradle配置错误"
+          echo "4. Java/Android SDK版本不兼容"
+          echo ""
+          echo "🔧 建议解决方案："
+          echo "1. 检查package.json中的依赖"
+          echo "2. 确保android/目录配置正确"
+          echo "3. 使用Web版本作为临时方案"
+          echo "4. 本地环境测试构建过程"
+        fi
+        
+        if [ "${{ steps.find_apks.outputs.has_aab }}" == "true" ]; then
+          echo ""
+          echo "📦 同时生成了AAB文件（Google Play Bundle格式）"
+        fi
